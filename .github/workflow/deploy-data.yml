@@ -1,0 +1,33 @@
+name: Deploy Data Layer
+
+on:
+  push:
+    branches: [deploy]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      - name: Copiar compose a EC2-Data via SSM
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_DATA_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=[
+              "cd /home/ec2-user",
+              "git clone https://github.com/ORG/REPO repo || (cd repo && git pull)",
+              "cd repo",
+              "echo POSTGRES_PASSWORD=SECRET_POSTGRES_PASSWORD > .env",
+              "docker compose -f docker-compose.yml up -d --pull always"
+            ]'
