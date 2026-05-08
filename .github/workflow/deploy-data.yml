@@ -14,10 +14,10 @@ jobs:
       - name: Configurar credenciales AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region:            ${{ secrets.AWS_REGION }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Copiar compose a EC2-Data via SSM
         run: |
@@ -26,7 +26,7 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --parameters 'commands=[
               "cd /home/ec2-user",
-              "git clone https://github.com/ORG/REPO repo || (cd repo && git pull)",
+              "git clone https://github.com/elpanxo/notara-data.git repo || (cd repo && git pull)",
               "cd repo",
               "echo POSTGRES_PASSWORD=SECRET_POSTGRES_PASSWORD > .env",
               "docker compose -f docker-compose.yml up -d --pull always"
