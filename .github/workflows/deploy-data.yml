@@ -19,15 +19,14 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Copiar compose a EC2-Data via SSM
+      - name: Deploy en EC2-Data via SSM
         run: |
           aws ssm send-command \
             --instance-ids "${{ secrets.EC2_DATA_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters 'commands=[
-              "cd /home/ec2-user",
-              "git clone https://github.com/elpanxo/notara-data.git repo || (cd repo && git pull)",
-              "cd repo",
-              "echo POSTGRES_PASSWORD=SECRET_POSTGRES_PASSWORD > .env",
+            --parameters commands='[
+              "if [ ! -d /home/ec2-user/repo ]; then git clone https://github.com/elpanxo/notara-data.git /home/ec2-user/repo; else cd /home/ec2-user/repo && git pull; fi",
+              "cd /home/ec2-user/repo",
+              "echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} > .env",
               "docker compose -f docker-compose.yml up -d --pull always"
             ]'
