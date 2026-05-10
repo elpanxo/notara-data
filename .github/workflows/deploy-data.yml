@@ -1,57 +1,36 @@
-name: Deploy Data Layer
+name: Deploy Notara Data Layer
 on:
   push:
     branches: [main]
 
 jobs:
-  build-push-ecr:
-    runs-on: ubuntu-latest
+  build-and-deploy:
+    runs-on: self-hosted
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Configurar credenciales AWS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Login a Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build y Push imagen a ECR
+      - name: Login a ECR
         run: |
-          docker build -t ${{ secrets.ECR_REPO_URL_DB }}:latest ./db
-          docker push ${{ secrets.ECR_REPO_URL_DB }}:latest
+          aws ecr get-login-password --region us-east-1 | \
+            docker login --username AWS --password-stdin \
+            495450559805.dkr.ecr.us-east-1.amazonaws.com
 
-  deploy-via-ssm:
-    runs-on: self-hosted
-    needs: build-push-ecr
-    steps:
-      - name: Deploy en Ec2Data via SSM
+      - name: Build y Push a ECR
+        run: |
+          docker build -t 495450559805.dkr.ecr.us-east-1.amazonaws.com/notara-data:latest .
+          docker push 495450559805.dkr.ecr.us-east-1.amazonaws.com/notara-data:latest
+
+      - name: Deploy en EC2 Data via SSM
         run: |
           aws ssm send-command \
             --instance-ids "${{ secrets.EC2_DATA_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
             --region us-east-1 \
-            --output text \
-            --query "Command.CommandId" \
             --parameters commands='[
-              "aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}",
-              "docker pull ${{ secrets.ECR_REPO_URL_DB }}:latest",
-              "docker stop data-container || true",
-              "docker rm data-container || true",
-              "docker run -d --name data-container -p 5432:5432 ${{ secrets.ECR_REPO_URL_DB }}:latest"
+              "aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 495450559805.dkr.ecr.us-east-1.amazonaws.com",
+              "docker pull 495450559805.dkr.ecr.us-east-1.amazonaws.com/notara-data:latest",
+              "docker stop notara-data || true",
+              "docker rm notara-data || true",
+              "docker run -d --name notara-data -p 5432:5432 495450559805.dkr.ecr.us-east-1.amazonaws.com/notara-data:latest"
             ]'
-
-      - name: Esperar resultado del comando SSM
-        run: |
-          sleep 15
-          aws ssm list-command-invocations \
-            --instance-id "${{ secrets.EC2_DATA_INSTANCE_ID }}" \
-            --details \
-            --region us-east-1 \
-            --query "CommandInvocations[0].CommandPlugins[0].{Status:Status,Output:Output}" \
-            --output table
