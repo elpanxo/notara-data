@@ -1,11 +1,10 @@
 name: Deploy Data Layer
-
 on:
   push:
     branches: [main]
 
 jobs:
-  deploy:
+  build-push-ecr:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout código
@@ -19,14 +18,31 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Deploy en EC2-Data via SSM
+      - name: Login a Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build y Push imagen a ECR
         run: |
-          aws ssm send-command \
-            --instance-ids "${{ secrets.EC2_DATA_INSTANCE_ID }}" \
-            --document-name "AWS-RunShellScript" \
-            --parameters commands='[
-              "if [ ! -d /home/ec2-user/repo ]; then git clone https://github.com/elpanxo/notara-data.git /home/ec2-user/repo; else cd /home/ec2-user/repo && git pull; fi",
-              "cd /home/ec2-user/repo",
-              "echo POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} > .env",
-              "docker compose -f docker-compose.yml up -d --pull always"
-            ]'
+          docker build -t ${{ secrets.ECR_REPO_URL_DB }}:latest ./db
+          docker push ${{ secrets.ECR_REPO_URL_DB }}:latest
+
+  deploy-ec2:
+    runs-on: ubuntu-latest
+    needs: build-push-ecr
+    steps:
+      - name: Deploy en EC2 via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_DATA_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+              docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+            docker pull ${{ secrets.ECR_REPO_URL_DB }}:latest
+            docker stop data-container || true
+            docker rm data-container || true
+            docker run -d --name data-container \
+              -e POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
+              -p 5432:5432 \
+              ${{ secrets.ECR_REPO_URL_DB }}:latest
