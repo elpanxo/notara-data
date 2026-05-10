@@ -1,7 +1,7 @@
 name: Deploy Notara Data Layer
 on:
   push:
-    branches: [main]
+    branches: [deploy]
 
 jobs:
   deploy:
