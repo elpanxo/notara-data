@@ -67,3 +67,5 @@ volumes:
   postgres_notas_metas_data:
   mongo_data:
   redis_data:
+
+  
