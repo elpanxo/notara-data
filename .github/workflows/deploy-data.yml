@@ -26,23 +26,25 @@ jobs:
           docker build -t ${{ secrets.ECR_REPO_URL_DB }}:latest ./db
           docker push ${{ secrets.ECR_REPO_URL_DB }}:latest
 
-  deploy-ec2:
+  deploy-via-ssm:
     runs-on: ubuntu-latest
     needs: build-push-ecr
     steps:
-      - name: Deploy en EC2 via SSH
+      - name: SSH a EC2 puente → lanza SSM en EC2 Data
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.EC2_DATA_HOST }}
+          host: ${{ secrets.EC2_BRIDGE_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
-              docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-            docker pull ${{ secrets.ECR_REPO_URL_DB }}:latest
-            docker stop data-container || true
-            docker rm data-container || true
-            docker run -d --name data-container \
-              -e POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
-              -p 5432:5432 \
-              ${{ secrets.ECR_REPO_URL_DB }}:latest
+            aws ssm send-command \
+              --instance-ids "${{ secrets.EC2_DATA_INSTANCE_ID }}" \
+              --document-name "AWS-RunShellScript" \
+              --region us-east-1 \
+              --parameters commands='[
+                "aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}",
+                "docker pull ${{ secrets.ECR_REPO_URL_DB }}:latest",
+                "docker stop data-container || true",
+                "docker rm data-container || true",
+                "docker run -d --name data-container -p 5432:5432 ${{ secrets.ECR_REPO_URL_DB }}:latest"
+              ]'
