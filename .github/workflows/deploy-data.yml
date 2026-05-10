@@ -4,22 +4,11 @@ on:
     branches: [main]
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: self-hosted
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
-
-      - name: Login a ECR
-        run: |
-          aws ecr get-login-password --region us-east-1 | \
-            docker login --username AWS --password-stdin \
-            495450559805.dkr.ecr.us-east-1.amazonaws.com
-
-      - name: Build y Push a ECR
-        run: |
-          docker build -t 495450559805.dkr.ecr.us-east-1.amazonaws.com/notara-data:latest .
-          docker push 495450559805.dkr.ecr.us-east-1.amazonaws.com/notara-data:latest
 
       - name: Deploy en EC2 Data via SSM
         run: |
@@ -28,9 +17,18 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --region us-east-1 \
             --parameters commands='[
-              "aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 495450559805.dkr.ecr.us-east-1.amazonaws.com",
-              "docker pull 495450559805.dkr.ecr.us-east-1.amazonaws.com/notara-data:latest",
-              "docker stop notara-data || true",
-              "docker rm notara-data || true",
-              "docker run -d --name notara-data -p 5432:5432 495450559805.dkr.ecr.us-east-1.amazonaws.com/notara-data:latest"
+              "if [ ! -d /home/ec2-user/notara-data ]; then git clone https://github.com/elpanxo/notara-data.git /home/ec2-user/notara-data; else cd /home/ec2-user/notara-data && git pull; fi",
+              "cd /home/ec2-user/notara-data",
+              "docker compose down || true",
+              "docker compose up -d"
             ]'
+
+      - name: Verificar estado del comando
+        run: |
+          sleep 15
+          aws ssm list-command-invocations \
+            --instance-id "${{ secrets.EC2_DATA_INSTANCE_ID }}" \
+            --details \
+            --region us-east-1 \
+            --query "CommandInvocations[0].CommandPlugins[0].{Status:Status,Output:Output}" \
+            --output table
