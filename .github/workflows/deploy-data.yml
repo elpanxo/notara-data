@@ -6,37 +6,21 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Configurar AWS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region:            us-east-1
-
-      - name: Deploy en EC2 Data via SSM
+      - name: Actualizar repositorio
         run: |
-          aws ssm send-command \
-            --instance-ids "${{ secrets.EC2_DATA_INSTANCE_ID }}" \
-            --document-name "AWS-RunShellScript" \
-            --region us-east-1 \
-            --parameters commands='[
-              "sudo systemctl start docker",
-              "if [ ! -d /home/ec2-user/notara-data ]; then git clone https://github.com/elpanxo/notara-data.git /home/ec2-user/notara-data; else cd /home/ec2-user/notara-data && git pull; fi",
-              "cd /home/ec2-user/notara-data",
-              "sudo docker compose down || true",
-              "sudo docker compose up -d"
-            ]'
+          cd /home/ec2-user/notara-data
+          git pull
 
-      - name: Verificar estado del comando
+      - name: Levantar contenedores
         run: |
-          sleep 20
-          aws ssm list-command-invocations \
-            --instance-id "${{ secrets.EC2_DATA_INSTANCE_ID }}" \
-            --details \
-            --region us-east-1
+          cd /home/ec2-user/notara-data
+          docker compose down || true
+          docker compose up -d
+
+      - name: Verificar contenedores
+        run: docker ps
