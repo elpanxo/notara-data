@@ -19,7 +19,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Deploy via SSM
+      - name: Deploy en EC2 Data via SSM
         run: |
           aws ssm send-command \
             --instance-ids "${{ secrets.EC2_DATA_INSTANCE_ID }}" \
@@ -32,3 +32,11 @@ jobs:
               "sudo docker compose down || true",
               "sudo docker compose up -d"
             ]'
+
+      - name: Verificar estado del comando
+        run: |
+          sleep 20
+          aws ssm list-command-invocations \
+            --instance-id "${{ secrets.EC2_DATA_INSTANCE_ID }}" \
+            --details \
+            --region us-east-1
